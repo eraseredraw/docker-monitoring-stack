@@ -1,5 +1,0 @@
-# Конфигурация мониторинга — основной язык репозитория; Makefile и README — служебные.
-*.yml linguist-language=YAML
-*.yaml linguist-language=YAML
-Makefile linguist-detectable=false
-*.md linguist-documentation=true
