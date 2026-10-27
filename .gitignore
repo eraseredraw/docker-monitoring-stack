@@ -1,0 +1,9 @@
+# Файлы данных
+grafana-data/
+prometheus-data/
+
+# Логи
+*.log
+
+# OS
+.DS_Store
