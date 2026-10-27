@@ -1,0 +1,38 @@
+groups:
+  - name: node
+    rules:
+      - alert: HostDown
+        expr: up{job="node-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'node-exporter недоступен на {{ $labels.instance }}'
+          description: 'Цель не отвечает больше минуты.'
+
+      - alert: HighMemoryPressure
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Занято более 90% памяти на {{ $labels.instance }}'
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) < 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'На {{ $labels.instance }} осталось меньше 10% на {{ $labels.mountpoint }}'
+
+  - name: containers
+    rules:
+      - alert: ContainerRestartedRecently
+        expr: (time() - container_start_time_seconds{name!=""}) < 300
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Контейнер {{ $labels.name }} стартовал менее 5 минут назад'
+          description: 'Возможный crash loop: {{ $labels.name }} на {{ $labels.instance }}.'

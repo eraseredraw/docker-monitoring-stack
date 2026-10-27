@@ -1,62 +1,74 @@
-# Docker Monitoring Stack
+# Docker Monitoring Lab
 
-Простой production-ready стек мониторинга на базе **Prometheus** и **Grafana**, разворачиваемый через Docker Compose. Этот проект демонстрирует навыки работы с контейнеризацией и настройкой систем мониторинга.
+[![CI](https://github.com/eraseredraw/docker-monitoring-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/eraseredraw/docker-monitoring-stack/actions/workflows/ci.yml)
 
-## 🚀 Возможности
-- Разворачивание стека мониторинга одной командой.
-- Сбор метрик с Docker-хоста через **cAdvisor**.
-- Визуализация метрик в **Grafana**.
-- Изолированная Docker-сеть для компонентов мониторинга.
+Публичный стенд по observability: Prometheus + Grafana + cAdvisor + node-exporter, разворачивается одним `make up`.
 
-## 📂 Структура проекта
-```text
-.
-├── docker-compose.yml   # Описание сервисов стека
-├── prometheus.yml       # Конфигурация сбора метрик
-├── .gitignore
-└── README.md
+## Статус репозитория
+
+Это **лаборатория, а не боевой мониторинг**. Задача стенда — держать под рукой воспроизводимый контур, на котором можно проверить конфиг, правило алертинга или поведение scraper'а за минуту, не трогая рабочие системы.
+
+Продакшн-конфигурации (Alertmanager, Long-Term Storage, реальные дашборды и адреса инвентаря) лежат в закрытых репозиториях и не публикуются. Пароль `admin/admin` здесь — не забывчивость, а признак того, что контур поднят в изолированном контуре и наружу не смотрит.
+
+## Что здесь проверяется
+
+- Развёртывание контура мониторинга через Docker Compose с изолированной bridge-сетью.
+- Сбор метрик хоста (`node-exporter`) и контейнеров (`cAdvisor` — мониторинг самого Docker).
+- Валидация конфигурации до запуска: `make lint` гоняет `promtool check config` и `check rules`.
+- Alert-правила как код: пороги памяти/диска/доступности в `rules/alerts.yml`, проверяются тем же promtool.
+- Post-deploy проверка: `make check-targets` спрашивает у Prometheus API состояние целей, а не верит на слово, что «контейнер вверх».
+
+## Структура
+
+```
+docker-compose.yml     prometheus, grafana, cadvisor, node-exporter
+prometheus.yml         scrape-конфиг + подключение rule_files
+rules/alerts.yml       alert-правила (host, memory, disk, containers)
+Makefile               lint / up / ps / logs / check-targets / reset
+.github/workflows/ci.yml   promtool-валидация + подъём стенда в CI
 ```
 
-## 🛠️ Как использовать
+## Быстрый старт
 
-### 1. Подготовка
-Убедитесь, что у вас установлены **Docker** и **Docker Compose**:
 ```bash
-docker --version
-docker-compose --version
+make lint     # promtool проверяет prometheus.yml и правила (Docker уже нужен)
+make up       # проверить и поднять
+make ps       # состояние контейнеров
 ```
 
-### 2. Запуск стека
+Порты:
+
+| Сервис | Адрес |
+|---|---|
+| Prometheus | http://localhost:9090 |
+| Grafana | http://localhost:3000 (`admin` / `admin`) |
+| cAdvisor | http://localhost:8080 |
+| node-exporter | http://localhost:9100 |
+
+Проверить, что scrape-конвейер живой, можно не открывая браузер:
+
 ```bash
-docker-compose up -d
+curl -s "http://localhost:9090/api/v1/query?query=up" | grep -o '"job":"[a-z-]*"' | sort -u
+make check-targets
 ```
 
-### 3. Проверка
-После запуска откройте в браузере:
-- **Prometheus**: http://localhost:9090 — сбор метрик.
-- **Grafana**: http://localhost:3000 — визуализация (логин: `admin`, пароль: `admin`).
-- **cAdvisor**: http://localhost:8080 — метрики контейнеров.
+Гашение: `make down` сохраняет данные Grafana в volume, `make reset` сносит всё.
 
-### 4. Добавление дашборда Grafana
-1. Зайдите в Grafana.
-2. Добавьте источник данных **Prometheus** (`http://prometheus:9090`).
-3. Импортируйте дашборд, например ID **193** (Diplina monitoring) или **3124** (Node exporter).
+## Метрики и правила
 
-### 5. Остановка стека
-```bash
-docker-compose down
-```
+- `up`, `node_memory_MemAvailable_bytes`, `node_filesystem_avail_bytes` — узел.
+- `container_start_time_seconds`, `container_cpu_usage_seconds_total` — контейнеры.
+- `HostDown`, `HighMemoryPressure`, `DiskSpaceLow`, `ContainerRestartedRecently` — см. `rules/alerts.yml`.
 
-## 🧩 Архитектура
-```text
-Docker Host
-├── cAdvisor (8080) ──┐
-├── Prometheus (9090) ── Grafana (3000)
-└── monitoring network (bridge)
-```
+Правила написаны как данные в репозитории, а не кликами в UI: promtool их валидирует до применения, и их можно сравнить в diff.
 
-## 📚 Стек технологий
-- **Docker / Docker Compose**: Контейнеризация и оркестрация.
-- **Prometheus**: Сбор и хранение метрик.
-- **Grafana**: Визуализация метрик.
-- **cAdvisor**: Метрики Docker-контейнеров.
+## Не сделано осознанно
+
+- **Alertmanager** — логичное продолжение, но роутинг алертов в мессенджер требует реальных адресов получателей.
+- **Долгосрочное хранение** (Thanos/VictoriaMetrics) — на стенде с двумя хостами избыточно.
+- **Экспортируемые дашборды Grafana как JSON** — стоит добавить, чтобы дашборды тоже жили в репозитории, а не в браузере.
+- **Приватные пароли/секреты** — в публичном стенде их быть не должно.
+
+## Стек
+
+Docker Compose · Prometheus · PromQL · Alert rules · Grafana · cAdvisor · node-exporter

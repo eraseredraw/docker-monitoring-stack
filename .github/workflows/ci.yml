@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    paths:
+      - 'prometheus.yml'
+      - 'rules/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/ci.yml'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate prometheus config
+        run: |
+          docker run --rm -v "$PWD:/cfg:ro" prom/prometheus:latest \
+            promtool check config /cfg/prometheus.yml
+
+      - name: Validate alert rules
+        run: |
+          docker run --rm -v "$PWD:/cfg:ro" prom/prometheus:latest \
+            promtool check rules /cfg/rules/alerts.yml
+
+      - name: Validate compose file
+        run: docker compose config -q
+
+  smoke:
+    name: Bring stack up
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Up
+        run: docker compose up -d
+
+      - name: Wait for Prometheus ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9090/-/ready >/dev/null; then
+              echo "ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "Prometheus не стал ready за 60s" >&2; exit 1
+
+      - name: Config accepted by running instance
+        run: curl -sf http://localhost:9090/api/v1/status/config >/dev/null
+
+      - name: Target health
+        run: |
+          curl -s http://localhost:9090/api/v1/targets \
+            | grep -o '"job":"[a-z-]*","instance":"[^"]*"' || true
+
+      - name: Logs
+        if: always()
+        run: docker compose logs --tail=40
