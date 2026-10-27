@@ -1,19 +1,20 @@
 # Стенд: проверка конфигов до запуска и быстрое поднятие/сброс.
-# promtool/amtool берутся из образов, локально ничего ставить не нужно.
+# promtool берётся из образа Prometheus — локально ничего ставить не нужно.
+# --entrypoint обязателен: у prom/prometheus:latest entrypoint уже /bin/prometheus.
 
 PROM_IMAGE  := prom/prometheus:latest
 GRAFANA_URL := http://localhost:3000
 
-.PHONY: help lint up down ps logs promtool check-targets reset
+.PHONY: help lint up down ps logs check-targets reset
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
 
 lint: ## Проверить prometheus.yml и alert-правила через promtool
-	@docker run --rm -v "$(PWD):/cfg:ro" $(PROM_IMAGE) \
-		promtool check config /cfg/prometheus.yml
-	@docker run --rm -v "$(PWD):/cfg:ro" $(PROM_IMAGE) \
-		promtool check rules /cfg/rules/alerts.yml
+	@docker run --rm --entrypoint promtool -v "$(PWD):/cfg:ro" $(PROM_IMAGE) \
+		check config /cfg/prometheus.yml
+	@docker run --rm --entrypoint promtool -v "$(PWD):/cfg:ro" $(PROM_IMAGE) \
+		check rules /cfg/rules/alerts.yml
 
 up: lint ## Проверить конфиги и поднять стек
 	@docker compose up -d

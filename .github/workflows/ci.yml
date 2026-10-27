@@ -18,13 +18,13 @@ jobs:
 
       - name: Validate prometheus config
         run: |
-          docker run --rm -v "$PWD:/cfg:ro" prom/prometheus:latest \
-            promtool check config /cfg/prometheus.yml
+          docker run --rm --entrypoint promtool -v "$PWD:/cfg:ro" prom/prometheus:latest \
+            check config /cfg/prometheus.yml
 
       - name: Validate alert rules
         run: |
-          docker run --rm -v "$PWD:/cfg:ro" prom/prometheus:latest \
-            promtool check rules /cfg/rules/alerts.yml
+          docker run --rm --entrypoint promtool -v "$PWD:/cfg:ro" prom/prometheus:latest \
+            check rules /cfg/rules/alerts.yml
 
       - name: Validate compose file
         run: docker compose config -q
